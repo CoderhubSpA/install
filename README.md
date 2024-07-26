@@ -1,7 +1,7 @@
 # Install sheets
 Correr el comando en una terminal en modo administrador.
 
-El comando completo se usa de la siguiente manera. (ghtoken debe tener scopes `repo` y `package:read`)
+El comando completo se usa de la siguiente manera, reemplazando <sheets-folder_name>, <your-github-username>, <your-github-token> (ghtoken debe tener scopes `repo` y `package:read`).
 ```sh
 Invoke-Expression "& { $(Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/CoderhubSpA/install/main/install_sheets.ps1') } -sheetsName <sheets-folder_name> -githubUsername <your-github-username> -ghToken <your-github-token>"
 ```
