@@ -4,7 +4,7 @@ param (
     [string]$ghToken = ""
 )
 
-function Check-GitHubCLI {
+function Find-GitHubCLI {
     # Check if gh CLI is installed
     $ghPath = (Get-Command gh -ErrorAction SilentlyContinue).Path
 
@@ -59,7 +59,7 @@ function Check-XAMPP-Version {
     param (
         [string]$phpVersionFile
     )
-    $allowedVersions = @("7.4.*", "8.1.*")
+    $allowedVersions = @("8.1.*")
     $phpVersion = & "$phpVersionFile" -v | Select-String -Pattern "PHP (\d+\.\d+\.\d+)"
     $phpVersion = $phpVersion.Matches.Groups[1].Value
     Write-Host "Checking for XAMPP version... Found version $phpVersion" -ForegroundColor Magenta
@@ -170,13 +170,14 @@ function Add-HostsEntry {
     if (-not $foundHost) {
         Add-Content -Path $hostsFilePath -Value "`n$lineToAdd"
         Write-Host "Line added to hosts file." -ForegroundColor Yellow
-    } else {
+    }
+    else {
         Write-Host "Line already exists in hosts file." -ForegroundColor Green
     }
 }
 
 
-function Check-XAMPP-Installation {
+function Find-XAMPP-And-Add-To-Path {
     param (
         [string]$xamppPath
     )
@@ -193,6 +194,8 @@ function Check-XAMPP-Installation {
     }
 
     Add-PHP-Mysql-To-Path
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
+
     return $true
 }
 
@@ -206,19 +209,19 @@ function Get-GitHubCredentials {
 
     if (-not $manualGithub) {
         # Check if gh CLI is installed
-        if (-not (Check-GitHubCLI)) {
-            exit 1
+        if (-not (Find-GitHubCLI)) {
+            return 1
         }
         # Check if gh CLI is authenticated
         if (-not (Check-GH-Auth)) {
-            exit 1
+            return 1
         }
         # Get GitHub username using gh CLI
         $githubUsername = gh api user --jq '.login'
 
         if (-not $githubUsername) {
             Write-Error "Failed to retrieve GitHub username."
-            exit 1
+            return 1
         }
 
         Write-Host "GitHub username: $githubUsername"
@@ -228,7 +231,7 @@ function Get-GitHubCredentials {
 
         if (-not $ghToken) {
             Write-Error "Failed to retrieve GitHub personal access token."
-            exit 1
+            return 1
         }
 
         Write-Host "GitHub personal access token generated." -ForegroundColor Yellow
@@ -236,7 +239,7 @@ function Get-GitHubCredentials {
 
     return @{
         "githubUsername" = $githubUsername
-        "ghToken" = $ghToken
+        "ghToken"        = $ghToken
     }
 }
 
@@ -275,7 +278,7 @@ function Clone-And-Cd-Into-Repository {
     }
     else {
         Write-Error "Failed to clone the repository."
-        exit 1
+        return 1
     }
 
     Set-Location $destinationPath
@@ -307,7 +310,7 @@ function Configure-ApacheVirtualHost {
     # Check if the file exists
     if (-Not (Test-Path $httpdConfPath)) {
         Write-Host "The httpd.conf file does not exist at the specified path: $httpdConfPath. Please configure it manually." -ForegroundColor Cyan
-        exit 1
+        return 1
     }
 
     # Read the content of the httpd.conf file
@@ -340,7 +343,7 @@ function Configure-ApacheVirtualHost {
     if ($httpdConfContent -match "ServerName $sheetsName.local") {
         # Update the DocumentRoot and Directory paths
         Write-Host "Virtual host configurations already exist. You may need to manually update it." -ForegroundColor Cyan
-        exit 1
+        return 1
     }
     else {
         # Append the virtual host configurations to the httpd.conf content
@@ -364,9 +367,45 @@ function Install-ComposerDependencies {
         Write-Host "Done" -ForegroundColor Yellow
         Write-Host "Publishing new SheetsFormBuilderProvider." -ForegroundColor Magenta
         php artisan vendor:publish --provider="paupololi\sheetsformbuilder\SheetsFormBuilderProvider"
-    } else {
+    }
+    else {
         Write-Host "Could not install Composer dependencies, please do it manually (publish_form_builder)" -ForegroundColor Red
     }
+}
+
+function Composer-Is-Installed {
+    $composerPath = (Get-Command composer -ErrorAction SilentlyContinue).Path
+    return $composerPath
+}
+
+function Find-Composer {
+    $composerPath = (Get-Command composer -ErrorAction SilentlyContinue).Path
+    return $composerPath
+}
+
+function Find-NPM {
+    $npmPath = (Get-Command npm -ErrorAction SilentlyContinue).Path
+    return $npmPath
+}
+
+function Install-Composer {
+    Write-Host "Installing Composer..." -ForegroundColor Magenta
+    php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+    php -r "if (hash_file('sha384', 'composer-setup.php') === 'dac665fdc30fdd8ec78b38b9800061b4150413ff2e3b6f88543c636f7cd84f6db9189d43a81e5503cda447da73c7e5b6') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
+    php composer-setup.php
+    php -r "unlink('composer-setup.php');"
+    Write-Host "Composer installed." -ForegroundColor Yellow
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
+    return $true
+}
+
+function Install-XAMPP {
+    Write-Host "Installing XAMPP..." -ForegroundColor Magenta
+    winget install -e --id ApacheFriends.Xampp.8.1
+    Write-Host "Finished installing XAMPP." -ForegroundColor Yellow
+    Find-XAMPP-And-Add-To-Path -xamppPath "C:\xampp"
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
+    return $true
 }
 
 ##################################################################################
@@ -376,7 +415,7 @@ function Install-ComposerDependencies {
 
 if (-not (Check-Admin)) {
     Write-Error "Script is not running as administrator. Open the terminal as administrator and run the script again."
-    exit 1    
+    return 1    
 }
 
 $credentials = Get-GitHubCredentials -githubUsername $githubUsername -ghToken $ghToken
@@ -384,13 +423,33 @@ $githubUsername = $credentials["githubUsername"]
 $ghToken = $credentials["ghToken"]
 
 # Check if XAMPP is installed
-$xamppPath = "C:\xampp"
-if (-not (Check-XAMPP-Installation -xamppPath $xamppPath)) {
-    exit 0
+if (-not (Find-XAMPP-And-Add-To-Path -xamppPath "C:\xampp")) {
+    if (-not (Install-XAMPP)) {
+        Write-Host "Failed to install XAMPP." -ForegroundColor Red
+        return 1
+    }
+}
+
+# update PATH
+$env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
+
+# Check if Composer is installed
+if (-not (Find-Composer)) {
+    if (-not (Install-Composer)) {
+        Write-Host "Failed to install Composer." -ForegroundColor Red
+        return 1
+    }
 }
 
 # Configure Composer auth.json
 Configure-ComposerAuthJson -githubUsername $githubUsername -ghToken $ghToken
+
+# check if npm is installed
+if (-not (Find-NPM)) {
+    Write-Host "npm is not installed. Please install it manually." -ForegroundColor Red
+    return 1
+}
+
 
 # Add registry and authentication token to .npmrc if not already present
 Configure-Npmrc -ghToken $ghToken
@@ -416,3 +475,11 @@ Copy-EnvFile -envExamplePath $envExamplePath -envPath $envPath
 Install-ComposerDependencies -envPath $envPath
 
 Write-Host "Installation completed successfully. Now configure .env manually and create the database before running the application." -ForegroundColor Cyan
+
+
+
+
+##### TODO
+# instalar xampp con winget
+# instalar composer?
+# actualizar PATH luego de ponerle cosas con $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
