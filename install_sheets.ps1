@@ -413,6 +413,7 @@ function Install-XAMPP {
 ##################################################################################
 
 
+try {
 if (-not (Check-Admin)) {
     Write-Error "Script is not running as administrator. Open the terminal as administrator and run the script again."
     return 1    
@@ -478,7 +479,10 @@ Write-Host "Installation completed successfully. Now configure .env manually and
 
 
 
-
+}
+catch {
+    Write-Host $_ -ForegroundColor Red
+}
 ##### TODO
 # instalar xampp con winget
 # instalar composer?
