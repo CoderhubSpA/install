@@ -4,6 +4,36 @@ param (
     [string]$ghToken = ""
 )
 
+function Refresh-Session-Path {
+    # Retrieve the current session's PATH environment variable
+    $currentSessionPath = $env:PATH -split ';'
+
+    # Retrieve the machine-level PATH environment variable
+    $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine) -split ';'
+
+    # Merge both PATH values, ensuring no duplicates
+    $mergedPath = $currentSessionPath + $machinePath | Sort-Object -Unique
+
+    # Update the current session's PATH environment variable
+    $env:PATH = [string]::Join(';', $mergedPath)
+}
+function Add-PATH {
+    param (
+        [string]$addpath
+    )
+    $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
+
+    if ($machinePath -notlike "*$addpath*") {
+        $machinePath += ";$addpath"
+        [System.Environment]::SetEnvironmentVariable("PATH", $machinePath, [System.EnvironmentVariableTarget]::Machine)
+        Write-Host "Added $addpath to the system PATH environment variable." -ForegroundColor Magenta
+    }
+    else {
+        Write-Host "$addpath is already in the system PATH environment variable." -ForegroundColor Green
+    }
+    Refresh-Session-Path
+}
+
 function Find-GitHubCLI {
     # Check if gh CLI is installed
     $ghPath = (Get-Command gh -ErrorAction SilentlyContinue).Path
@@ -70,34 +100,16 @@ function Check-XAMPP-Version {
         }
     }
 
-    Write-Error "None of the expected XAMPP versions is installed."
+    Write-Host "None of the expected XAMPP versions is installed." -ForegroundColor Red
     return $false
 }
 
 function Add-PHP-Mysql-To-Path {
     $phpPath = "C:\xampp\php\"
     $mysqlPath = "C:\xampp\mysql\bin\"
+    Add-PATH -addpath $phpPath
+    Add-PATH -addpath $mysqlPath
 
-    $currentPath = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::Machine)
-
-    if ($currentPath -notlike "*$phpPath*") {
-        $currentPath += ";$phpPath"
-        Write-Host "PHP path is added to the system PATH environment variable." -ForegroundColor Magenta
-    }
-    else {
-        Write-Host "PHP path is already in the system PATH environment variable." -ForegroundColor Green
-    }
-
-    if ($currentPath -notlike "*$mysqlPath*") {
-        $currentPath += ";$mysqlPath"
-        Write-Host "MySQL path is added to the system PATH environment variable." -ForegroundColor Magenta
-    }
-    else {
-        Write-Host "MySQL path is already in the system PATH environment variable." -ForegroundColor Green
-    }
-
-    [System.Environment]::SetEnvironmentVariable("Path", $currentPath, [System.EnvironmentVariableTarget]::Machine)
-    Write-Host "XAMPP php and mysql paths are added to the system PATH environment variable." -ForegroundColor Yellow
 }
 
 function Configure-Npmrc {
@@ -185,16 +197,14 @@ function Find-XAMPP-And-Add-To-Path {
     $phpVersionFile = "$xamppPath\php\php.exe"
 
     if (-not (Test-Path $phpVersionFile)) {
-        Write-Error "XAMPP is not installed at $xamppPath."
+        Write-Host "XAMPP is not installed at $xamppPath." -ForegroundColor Red
         return $false
     }
 
     if (-not (Check-XAMPP-Version -phpVersionFile $phpVersionFile)) {
         return $false
     }
-
     Add-PHP-Mysql-To-Path
-    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
 
     return $true
 }
@@ -355,23 +365,6 @@ function Configure-ApacheVirtualHost {
     Write-Host "Apache configuration updated successfully. Please restart Apache for the changes to take effect." -ForegroundColor Cyan
 }
 
-function Install-ComposerDependencies {
-    param (
-        [string]$envPath
-    )
-
-    Write-Host "Installing Composer dependencies (form builder)..." -ForegroundColor Magenta
-    if (Test-Path $envPath) {
-        Write-Host "Cleaning old vendor for SheetsFormBuilderProvider (./resources/js/vendor/FormBuilder_js)" -ForegroundColor Magenta
-        Remove-Item -Recurse -Force ./resources/js/vendor/FormBuilder_js
-        Write-Host "Done" -ForegroundColor Yellow
-        Write-Host "Publishing new SheetsFormBuilderProvider." -ForegroundColor Magenta
-        php artisan vendor:publish --provider="paupololi\sheetsformbuilder\SheetsFormBuilderProvider"
-    }
-    else {
-        Write-Host "Could not install Composer dependencies, please do it manually (publish_form_builder)" -ForegroundColor Red
-    }
-}
 
 function Composer-Is-Installed {
     $composerPath = (Get-Command composer -ErrorAction SilentlyContinue).Path
@@ -380,6 +373,7 @@ function Composer-Is-Installed {
 
 function Find-Composer {
     $composerPath = (Get-Command composer -ErrorAction SilentlyContinue).Path
+    Write-Host "Search for composer: $composerPath"
     return $composerPath
 }
 
@@ -395,7 +389,8 @@ function Install-Composer {
     php composer-setup.php
     php -r "unlink('composer-setup.php');"
     Write-Host "Composer installed." -ForegroundColor Yellow
-    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
+
+    Refresh-Session-Path
     return $true
 }
 
@@ -404,18 +399,18 @@ function Install-XAMPP {
     winget install -e --id ApacheFriends.Xampp.8.1 --accept-package-agreements --accept-source-agreements 
     Write-Host "Finished installing XAMPP." -ForegroundColor Yellow
     Find-XAMPP-And-Add-To-Path -xamppPath "C:\xampp"
-    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
+    Refresh-Session-Path
     return $true
 }
 
 function Install-NPM {
     Write-Host "Installing npm..." -ForegroundColor Magenta
-    winget install --id=OpenJS.NodeJS -v "20.7.0" -e --accept-package-agreements --accept-source-agreements 
+    winget install -e --id=OpenJS.NodeJS -v "20.7.0" --accept-package-agreements --accept-source-agreements 
     Write-Host "Finished installing npm." -ForegroundColor Yellow
     if (-not (Find-NPM-And-Add_to_path -npmPath "C:\Program Files\nodejs")) {
         return $false
     }
-    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
+    Refresh-Session-Path
     return $true
 }
 function Find-NPM-And-Add_to_path {
@@ -424,22 +419,11 @@ function Find-NPM-And-Add_to_path {
     )
 
     if (-not (Test-Path $npmPath)) {
-        Write-Error "npm is not installed at $npmPath."
+        Write-Host "npm is not installed at $npmPath." -ForegroundColor Red
         return $false
     }
 
-    $currentPath = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::Machine)
-
-    if ($currentPath -notlike "*$npmPath*") {
-        $currentPath += ";$npmPath"
-        Write-Host "npm path is added to the system PATH environment variable." -ForegroundColor Magenta
-    }
-    else {
-        Write-Host "npm path is already in the system PATH environment variable." -ForegroundColor Green
-    }
-
-    [System.Environment]::SetEnvironmentVariable("Path", $currentPath, [System.EnvironmentVariableTarget]::Machine)
-    Write-Host "npm path is added to the system PATH environment variable." -ForegroundColor Yellow
+    Add-PATH -addpath $npmPath
     return $true
 }
 
@@ -457,9 +441,9 @@ try {
     $credentials = Get-GitHubCredentials -githubUsername $githubUsername -ghToken $ghToken
     $githubUsername = $credentials["githubUsername"]
     $ghToken = $credentials["ghToken"]
-
     # Check if XAMPP is installed
     if (-not (Find-XAMPP-And-Add-To-Path -xamppPath "C:\xampp")) {
+        Write-Host "XAMPP is not installed. Installing..." -ForegroundColor Magenta
         if (-not (Install-XAMPP)) {
             Write-Host "Failed to install XAMPP." -ForegroundColor Red
             return 1
@@ -467,10 +451,10 @@ try {
     }
 
     # update PATH
-    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
-
+    Refresh-Session-Path
     # Check if Composer is installed
     if (-not (Find-Composer)) {
+        Write-Host "Composer is not installed. Installing..." -ForegroundColor Magenta
         if (-not (Install-Composer)) {
             Write-Host "Failed to install Composer." -ForegroundColor Red
             return 1
@@ -479,7 +463,6 @@ try {
 
     # Configure Composer auth.json
     Configure-ComposerAuthJson -githubUsername $githubUsername -ghToken $ghToken
-
     # check if npm is installed
     if (-not (Find-NPM)) {
         if (-not (Install-NPM)) {
@@ -509,12 +492,8 @@ try {
 
     Copy-EnvFile -envExamplePath $envExamplePath -envPath $envPath
 
-    # Install sheets form builder
-    Install-ComposerDependencies -envPath $envPath
 
     Write-Host "Installation completed successfully. Now configure .env manually and create the database before running the application." -ForegroundColor Cyan
-
-
 
 }
 catch {
