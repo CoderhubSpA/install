@@ -112,6 +112,24 @@ function Add-PHP-Mysql-To-Path {
 
 }
 
+function Enable-PHP-Extension {
+    param (
+        [string]$extensionName
+    )
+    $phpIniPath = "C:\xampp\php\php.ini"
+    $extension = "extension=$extensionName"
+    # Read the content of the php.ini file
+    $phpIniContent = Get-Content -Path $phpIniPath
+
+    # Uncomment the extension line if it exists
+    $phpIniContent = $phpIniContent -replace ";$extension", $extension
+
+    # Write the updated content back to the php.ini file
+    Set-Content -Path $phpIniPath -Value $phpIniContent
+
+    Write-Host "Extension '$extension' has been enabled in php.ini." -ForegroundColor Green
+}
+
 function Configure-Npmrc {
     param (
         [string]$ghToken
@@ -270,6 +288,12 @@ function Configure-ComposerAuthJson {
         }
     } | ConvertTo-Json -Depth 3
 
+    # Ensure the directory exists
+    $authJsonDirectory = [System.IO.Path]::GetDirectoryName($authJsonPath)
+    if (-not (Test-Path -Path $authJsonDirectory)) {
+        New-Item -ItemType Directory -Path $authJsonDirectory -Force
+    }
+
     Set-Content -Path $authJsonPath -Value $authJsonContent
 
     Write-Host "Composer auth.json configured with GitHub personal access token." -ForegroundColor Yellow
@@ -383,14 +407,33 @@ function Find-NPM {
 }
 
 function Install-Composer {
+    $composerPath = "C:\composer"
     Write-Host "Installing Composer..." -ForegroundColor Magenta
     php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
     php -r "if (hash_file('sha384', 'composer-setup.php') === 'dac665fdc30fdd8ec78b38b9800061b4150413ff2e3b6f88543c636f7cd84f6db9189d43a81e5503cda447da73c7e5b6') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
     php composer-setup.php
     php -r "unlink('composer-setup.php');"
-    Write-Host "Composer installed." -ForegroundColor Yellow
 
-    Refresh-Session-Path
+    if (-not (Test-Path -Path $composerPath)) {
+        New-Item -ItemType Directory -Path $composerPath -Force
+    }
+    Move-Item composer.phar "$composerPath\composer.phar" -Force
+    
+    # Create composer.bat file with the specified content
+    $composerBatContent = @"
+@echo OFF
+:: in case DelayedExpansion is on and a path contains ! 
+setlocal DISABLEDELAYEDEXPANSION
+php "%~dp0composer.phar" %*
+"@
+    $composerBatPath = "$composerPath\composer.bat"
+    Set-Content -Path $composerBatPath -Value $composerBatContent
+    
+    
+    Add-PATH -addpath $composerPath
+
+    
+    Write-Host "Composer installed." -ForegroundColor Yellow
     return $true
 }
 
@@ -450,6 +493,11 @@ try {
         }
     }
 
+    Enable-PHP-Extension -extensionName "ldap"
+    Enable-PHP-Extension -extensionName "gd"
+    Enable-PHP-Extension -extensionName "sodium"
+
+
     # update PATH
     Refresh-Session-Path
     # Check if Composer is installed
@@ -492,7 +540,9 @@ try {
 
     Copy-EnvFile -envExamplePath $envExamplePath -envPath $envPath
 
-
+    composer install
+    npm i
+    
     Write-Host "Installation completed successfully. Now configure .env manually and create the database before running the application." -ForegroundColor Cyan
 
 }
