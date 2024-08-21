@@ -10,7 +10,7 @@ function Find-GitHubCLI {
 
     if (-not $ghPath) {
         Write-Host "GitHub CLI (gh) is not installed. Installing..." -ForegroundColor Magenta
-        winget install --id GitHub.cli -e
+        winget install --id GitHub.cli -e --accept-package-agreements --accept-source-agreements 
         $ghPath = (Get-Command gh -ErrorAction SilentlyContinue).Path
         if (-not $ghPath) {
             Write-Error "Failed to install GitHub CLI (gh)."
@@ -401,10 +401,45 @@ function Install-Composer {
 
 function Install-XAMPP {
     Write-Host "Installing XAMPP..." -ForegroundColor Magenta
-    winget install -e --id ApacheFriends.Xampp.8.1
+    winget install -e --id ApacheFriends.Xampp.8.1 --accept-package-agreements --accept-source-agreements 
     Write-Host "Finished installing XAMPP." -ForegroundColor Yellow
     Find-XAMPP-And-Add-To-Path -xamppPath "C:\xampp"
     $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
+    return $true
+}
+
+function Install-NPM {
+    Write-Host "Installing npm..." -ForegroundColor Magenta
+    winget install --id=OpenJS.NodeJS -v "20.7.0" -e --accept-package-agreements --accept-source-agreements 
+    Write-Host "Finished installing npm." -ForegroundColor Yellow
+    if (-not (Find-NPM-And-Add_to_path -npmPath "C:\Program Files\nodejs")) {
+        return $false
+    }
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
+    return $true
+}
+function Find-NPM-And-Add_to_path {
+    param (
+        [string]$npmPath
+    )
+
+    if (-not (Test-Path $npmPath)) {
+        Write-Error "npm is not installed at $npmPath."
+        return $false
+    }
+
+    $currentPath = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::Machine)
+
+    if ($currentPath -notlike "*$npmPath*") {
+        $currentPath += ";$npmPath"
+        Write-Host "npm path is added to the system PATH environment variable." -ForegroundColor Magenta
+    }
+    else {
+        Write-Host "npm path is already in the system PATH environment variable." -ForegroundColor Green
+    }
+
+    [System.Environment]::SetEnvironmentVariable("Path", $currentPath, [System.EnvironmentVariableTarget]::Machine)
+    Write-Host "npm path is added to the system PATH environment variable." -ForegroundColor Yellow
     return $true
 }
 
@@ -414,68 +449,70 @@ function Install-XAMPP {
 
 
 try {
-if (-not (Check-Admin)) {
-    Write-Error "Script is not running as administrator. Open the terminal as administrator and run the script again."
-    return 1    
-}
-
-$credentials = Get-GitHubCredentials -githubUsername $githubUsername -ghToken $ghToken
-$githubUsername = $credentials["githubUsername"]
-$ghToken = $credentials["ghToken"]
-
-# Check if XAMPP is installed
-if (-not (Find-XAMPP-And-Add-To-Path -xamppPath "C:\xampp")) {
-    if (-not (Install-XAMPP)) {
-        Write-Host "Failed to install XAMPP." -ForegroundColor Red
-        return 1
+    if (-not (Check-Admin)) {
+        Write-Error "Script is not running as administrator. Open the terminal as administrator and run the script again."
+        return 1    
     }
-}
 
-# update PATH
-$env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
+    $credentials = Get-GitHubCredentials -githubUsername $githubUsername -ghToken $ghToken
+    $githubUsername = $credentials["githubUsername"]
+    $ghToken = $credentials["ghToken"]
 
-# Check if Composer is installed
-if (-not (Find-Composer)) {
-    if (-not (Install-Composer)) {
-        Write-Host "Failed to install Composer." -ForegroundColor Red
-        return 1
+    # Check if XAMPP is installed
+    if (-not (Find-XAMPP-And-Add-To-Path -xamppPath "C:\xampp")) {
+        if (-not (Install-XAMPP)) {
+            Write-Host "Failed to install XAMPP." -ForegroundColor Red
+            return 1
+        }
     }
-}
 
-# Configure Composer auth.json
-Configure-ComposerAuthJson -githubUsername $githubUsername -ghToken $ghToken
+    # update PATH
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", [System.EnvironmentVariableTarget]::Machine)
 
-# check if npm is installed
-if (-not (Find-NPM)) {
-    Write-Host "npm is not installed. Please install it manually." -ForegroundColor Red
-    return 1
-}
+    # Check if Composer is installed
+    if (-not (Find-Composer)) {
+        if (-not (Install-Composer)) {
+            Write-Host "Failed to install Composer." -ForegroundColor Red
+            return 1
+        }
+    }
+
+    # Configure Composer auth.json
+    Configure-ComposerAuthJson -githubUsername $githubUsername -ghToken $ghToken
+
+    # check if npm is installed
+    if (-not (Find-NPM)) {
+        if (-not (Install-NPM)) {
+            Write-Host "npm could not be installed. Please install it manually." -ForegroundColor Red
+            return 1
+        }
+    }
 
 
-# Add registry and authentication token to .npmrc if not already present
-Configure-Npmrc -ghToken $ghToken
+    # Add registry and authentication token to .npmrc if not already present
+    Configure-Npmrc -ghToken $ghToken
 
-# Clone the repository and cd into it
-$repositoryUrl = "https://github.com/CoderhubSpA/sheets.git"
-$destinationPath = $sheetsName
-Clone-And-Cd-Into-Repository -repositoryUrl $repositoryUrl -destinationPath $destinationPath
+    # Clone the repository and cd into it
+    $repositoryUrl = "https://github.com/CoderhubSpA/sheets.git"
+    $destinationPath = $sheetsName
+    Clone-And-Cd-Into-Repository -repositoryUrl $repositoryUrl -destinationPath $destinationPath
 
-# Configure Apache virtual hosts file (httpd.conf)
-Configure-ApacheVirtualHost -sheetsName $sheetsName
+    # Configure Apache virtual hosts file (httpd.conf)
+    Configure-ApacheVirtualHost -sheetsName $sheetsName
 
-# Add an entry to the hosts file
-Add-HostsEntry -sheetsName $sheetsName
+    # Add an entry to the hosts file
+    Add-HostsEntry -sheetsName $sheetsName
 
-# Copy .env.example to .env
-$envExamplePath = "$PWD\.env.example"
-$envPath = "$PWD\.env"
+    # Copy .env.example to .env
+    $envExamplePath = "$PWD\.env.example"
+    $envPath = "$PWD\.env"
 
-Copy-EnvFile -envExamplePath $envExamplePath -envPath $envPath
+    Copy-EnvFile -envExamplePath $envExamplePath -envPath $envPath
 
-# Install sheets form builder
-Install-ComposerDependencies -envPath $envPath
+    # Install sheets form builder
+    Install-ComposerDependencies -envPath $envPath
 
-Write-Host "Installation completed successfully. Now configure .env manually and create the database before running the application." -ForegroundColor Cyan
+    Write-Host "Installation completed successfully. Now configure .env manually and create the database before running the application." -ForegroundColor Cyan
 
 
 
