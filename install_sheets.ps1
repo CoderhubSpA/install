@@ -40,7 +40,7 @@ function Find-GitHubCLI {
 
     if (-not $ghPath) {
         Write-Host "GitHub CLI (gh) is not installed. Installing..." -ForegroundColor Magenta
-        winget install --id GitHub.cli -e --accept-package-agreements --accept-source-agreements 
+        Invoke-Expression "winget install --id GitHub.cli -e --accept-package-agreements --accept-source-agreements "
         $ghPath = (Get-Command gh -ErrorAction SilentlyContinue).Path
         if (-not $ghPath) {
             Write-Error "Failed to install GitHub CLI (gh)."
@@ -331,6 +331,18 @@ function Copy-EnvFile {
     else {
         Write-Host ".env file already exists." -ForegroundColor Green
     }
+    # Ensure SESSION_SECURE_COOKIE is set to false in the .env file
+    # Read the content of the .env file
+    $envContent = Get-Content -Path $envPath
+
+    # Replace SESSION_SECURE_COOKIE=true with SESSION_SECURE_COOKIE=false
+    $updatedEnvContent = $envContent -replace "SESSION_SECURE_COOKIE=true", "SESSION_SECURE_COOKIE=false"
+
+    # Write the updated content back to the .env file
+    Set-Content -Path $envPath -Value $updatedEnvContent
+
+    Write-Host "SESSION_SECURE_COOKIE has been set to false in the .env file." -ForegroundColor Green
+
 }
 
 function Configure-ApacheVirtualHost {
@@ -439,7 +451,7 @@ php "%~dp0composer.phar" %*
 
 function Install-XAMPP {
     Write-Host "Installing XAMPP..." -ForegroundColor Magenta
-    winget install -e --id ApacheFriends.Xampp.8.1 --accept-package-agreements --accept-source-agreements 
+    Invoke-Expression "winget install -e --id ApacheFriends.Xampp.8.1 --accept-package-agreements --accept-source-agreements "
     Write-Host "Finished installing XAMPP." -ForegroundColor Yellow
     Find-XAMPP-And-Add-To-Path -xamppPath "C:\xampp"
     Refresh-Session-Path
@@ -448,7 +460,7 @@ function Install-XAMPP {
 
 function Install-NPM {
     Write-Host "Installing npm..." -ForegroundColor Magenta
-    winget install -e --id=OpenJS.NodeJS -v "20.7.0" --accept-package-agreements --accept-source-agreements 
+    Invoke-Expression "winget install -e --id=OpenJS.NodeJS -v "20.7.0" --accept-package-agreements --accept-source-agreements "
     Write-Host "Finished installing npm." -ForegroundColor Yellow
     if (-not (Find-NPM-And-Add_to_path -npmPath "C:\Program Files\nodejs")) {
         return $false
