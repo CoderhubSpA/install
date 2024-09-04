@@ -1,5 +1,5 @@
 # Install sheets
-Correr el comando en una terminal en modo administrador.
+Correr el comando en una terminal **powershell** en modo **administrador**.
 
 El comando completo se usa de la siguiente manera, reemplazando <sheets-folder_name>, <your-github-username>, <your-github-token> (ghtoken debe tener scopes `repo` y `package:read`).
 ```sh
