@@ -11,3 +11,11 @@ El comando completo se usa de la siguiente manera, reemplazando <sheets-folder_n
 - **-ghToken:** Token de acceso a github. Se genera en https://github.com/settings/tokens y debe tener los scopes `repo` y `package:read`
 
 -githubUsername y -ghToken son opcionales. Si no se especifican, el script instalará `gh` y hará login a github durante la instalación de sheets.
+
+
+## Servicios instalados
+El script instala:
+- Node
+- XAMPP
+- Composer
+- gh (solo si no se le entrega un username y token)
